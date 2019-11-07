@@ -1,0 +1,7 @@
+project (final CXX)
+cmake_policy(SET CMP0037 NEW)
+
+file(GLOB_RECURSE HEADER ${CMAKE_CURRENT_SOURCE_DIR}/*.hpp)
+file(GLOB_RECURSE SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
+
+add_executable(${PROJECT_NAME} ${HEADER} ${SOURCE})
