@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string_view>
+#include <string>
 
 #include <stdlib.h>
 #include <unistd.h>
@@ -7,6 +8,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <syslog.h>
+#include <sys/epoll.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 void startServer(std::string_view host,
 				 std::string_view port,
@@ -45,6 +50,41 @@ void startServer(std::string_view host,
     for (x = sysconf(_SC_OPEN_MAX); x>=0; x--)
     {
         close (x);
+    }
+
+	int s = socket(AF_INET, SOCK_STREAM, 0);
+	if (s == -1)
+	{
+		perror("socket error");
+		exit(1);
+	}
+
+	struct sockaddr_in servAddr;
+	servAddr.sin_family = AF_INET;
+	servAddr.sin_addr.s_addr = inet_addr(host.data());
+	servAddr.sin_port = htons(std::stoi(port.data()));
+	
+	int yes = 1;
+    if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
+        perror("setsockopt");
+        exit(1);
+    } 
+
+	if (bind(s, (struct sockaddr *) &servAddr, sizeof(servAddr)) == -1) {
+        perror("bind error");
+        close(s);
+        exit(1);
+    }
+
+	if (listen(s, 10) == -1) {
+        perror("listen error");
+        close(s);
+        exit(1);
+    }
+
+	int epfd = epoll_create(5);
+    if (epfd == -1) {
+        perror("epoll_create");
     }
 }
 
