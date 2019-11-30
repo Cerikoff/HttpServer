@@ -12,12 +12,27 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <fcntl.h>
+
+#define MAX_EVENTS 32
+
+int set_nonblock(int fd)
+{
+    int flags;
+#if defined(O_NONBLOCK)
+    if (-1 == (flags = fcntl(fd, F_GETFL, 0)))
+        flags = 0;
+    return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+#else
+    flags = 1;
+    return ioctl(fd, FIOBIO, &flags);
+#endif
+} 
 
 void startServer(std::string_view host,
 				 std::string_view port,
 				 std::string_view directory)
 {
-	std::cout << host << " " << port << " " << directory << std::endl;
     pid_t pid;
 
     pid = fork();
@@ -53,6 +68,8 @@ void startServer(std::string_view host,
     }
 
 	int s = socket(AF_INET, SOCK_STREAM, 0);
+	set_nonblock(s);
+
 	if (s == -1)
 	{
 		perror("socket error");
@@ -82,10 +99,55 @@ void startServer(std::string_view host,
         exit(1);
     }
 
-	int epfd = epoll_create(5);
+	int epfd = epoll_create1(0);
     if (epfd == -1) {
         perror("epoll_create");
     }
+
+	struct epoll_event event;
+	event.data.fd = s;
+	event.events = EPOLLIN;
+	epoll_ctl(epfd, EPOLL_CTL_ADD, s, &event);
+
+	while(true)
+	{
+		struct epoll_event evlist[MAX_EVENTS];
+		int N = epoll_wait(epfd, evlist, MAX_EVENTS, -1);
+
+		for(unsigned i = 0; i < N; ++i)
+		{
+			if(evlist[i].data.fd == s) 
+			{
+				int slaveSocket = accept(s, 0, 0);
+				set_nonblock(slaveSocket);
+
+				struct epoll_event event;
+				event.data.fd = slaveSocket;
+				event.events = EPOLLIN;
+				epoll_ctl(epfd, EPOLL_CTL_ADD, slaveSocket, &event);
+			}
+			else
+			{
+				static char buffer[2048];
+				int res = recv(evlist[i].data.fd, buffer, 2048, MSG_NOSIGNAL);
+				if(res == 0 && errno != EAGAIN)
+				{
+					shutdown(evlist[i].data.fd, SHUT_RDWR);
+					close(evlist[i].data.fd);
+				}
+				else if(res > 0)
+				{
+					static char response[] = "HTTP/1.0 200 OK\r\n"
+											"Content-length: 5\r\n"
+											"Connection: close\r\n"
+											"Content-Type: text/html\r\n"
+											"\r\n"
+											"hello";
+					send(evlist[i].data.fd, response, sizeof response, MSG_NOSIGNAL);
+				}
+			}
+		}
+	}
 }
 
 int main(int argc, char** argv)
@@ -121,9 +183,4 @@ int main(int argc, char** argv)
 	}
 
 	startServer(host, port, directory);
-
-	 while (1)
-     {
-         pause();
-     }
 }
