@@ -1,6 +1,9 @@
 #include <iostream>
 #include <string_view>
 #include <string>
+#include <sstream>
+#include <iterator>
+#include <fstream>
 
 #include <stdlib.h>
 #include <unistd.h>
@@ -28,6 +31,13 @@ int set_nonblock(int fd)
     return ioctl(fd, FIOBIO, &flags);
 #endif
 } 
+
+void sendNotFound(const int fd)
+{
+	static const char notFound[] = 
+		"HTTP/1.0 404 NOT FOUND\r\nContent-length: 0\r\nConnection: close\r\nContent-Type: text/html\r\n\r\n";
+	send(fd, notFound, sizeof notFound, MSG_NOSIGNAL);
+}
 
 void startServer(std::string_view host,
 				 std::string_view port,
@@ -137,13 +147,53 @@ void startServer(std::string_view host,
 				}
 				else if(res > 0)
 				{
-					static char response[] = "HTTP/1.0 200 OK\r\n"
-											"Content-length: 5\r\n"
-											"Connection: close\r\n"
-											"Content-Type: text/html\r\n"
-											"\r\n"
-											"hello";
-					send(evlist[i].data.fd, response, sizeof response, MSG_NOSIGNAL);
+					std::string req(buffer);
+					auto methodIt = req.find_first_of(' ');
+
+					if(std::string method(req.substr(0, methodIt)); method.compare("GET"))
+					{
+						sendNotFound(evlist[i].data.fd);
+					}
+					else
+					{
+						req.erase(0, methodIt + 1);
+						auto fileEndIndex = req.find_first_of(' ');
+
+						std::string file(req.substr(1, fileEndIndex - 1));
+
+						std::cout << file << file.size() << std::endl;
+
+						std::ifstream is (file);
+  						if (is) {
+    						is.seekg (0, is.end);
+    						int length = is.tellg();
+    						is.seekg (0, is.beg);
+
+    						char *buffer = new char [length];
+
+    						is.read (buffer,length);
+
+    						is.close();
+
+							std::stringstream stream;
+							stream << "HTTP/1.0 200 OK\r\n";
+							stream << "Content-length: "<< length << "\r\n";
+							stream << "Connection: close\r\n";
+							stream << "Content-Type: text/html\r\n";
+							stream << "\r\n";
+							stream << buffer;
+
+							auto resp = stream.str();
+
+							send(evlist[i].data.fd, resp.c_str(), resp.size(), MSG_NOSIGNAL);
+
+    						delete[] buffer;
+						}
+						else 
+						{
+							sendNotFound(evlist[i].data.fd);
+						}
+					}
 				}
 			}
 		}
