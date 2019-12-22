@@ -4,6 +4,9 @@ cmake_policy(SET CMP0037 NEW)
 file(GLOB_RECURSE HEADER ${CMAKE_CURRENT_SOURCE_DIR}/*.hpp)
 file(GLOB_RECURSE SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 
+set (LIBS "-pthread")
+
 add_executable(${PROJECT_NAME} ${HEADER} ${SOURCE})
 
-set_property(TARGET final PROPERTY CXX_STANDARD 17)
+#set_property(TARGET final PROPERTY CXX_STANDARD 17)
+target_link_libraries(${PROJECT_NAME} ${LIBS})

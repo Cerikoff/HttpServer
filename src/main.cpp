@@ -4,6 +4,7 @@
 #include <sstream>
 #include <iterator>
 #include <fstream>
+#include <thread>
 
 #include <stdlib.h>
 #include <unistd.h>
@@ -39,9 +40,70 @@ void sendNotFound(const int fd)
 	send(fd, notFound, sizeof notFound, MSG_NOSIGNAL);
 }
 
-void startServer(std::string_view host,
-				 std::string_view port,
-				 std::string_view directory)
+void sendResp(const int fd)
+{
+	static char buffer[2048];
+	int res = recv(fd, buffer, 2048, MSG_NOSIGNAL);
+	if(res == 0 && errno != EAGAIN)
+	{
+		shutdown(fd, SHUT_RDWR);
+		close(fd);
+	}
+	else if(res > 0)
+	{
+		std::string req(buffer);
+		auto methodIt = req.find_first_of(' ');
+
+		if(std::string method(req.substr(0, methodIt)); method.compare("GET"))
+		{
+			sendNotFound(fd);
+		}
+		else
+		{
+			req.erase(0, methodIt + 1);
+			auto fileEndIndex = req.find_first_of(' ');
+
+			std::string file(req.substr(1, fileEndIndex - 1));
+
+			std::cout << file << file.size() << std::endl;
+
+			std::ifstream is (file);
+  			if (is) {
+    			is.seekg (0, is.end);
+    			int length = is.tellg();
+    			is.seekg (0, is.beg);
+
+    			char *buffer = new char [length];
+
+    			is.read (buffer,length);
+
+    			is.close();
+
+				std::stringstream stream;
+				stream << "HTTP/1.0 200 OK\r\n";
+				stream << "Content-length: "<< length << "\r\n";
+				stream << "Connection: close\r\n";
+				stream << "Content-Type: text/html\r\n";
+				stream << "\r\n";
+				stream << buffer;
+
+				auto resp = stream.str();
+
+				send(fd, resp.c_str(), resp.size(), MSG_NOSIGNAL);
+
+    			delete[] buffer;
+			}
+			else 
+			{
+				sendNotFound(fd);
+			}
+		}
+	}
+}
+
+void startServer(const std::string &host,
+				 const std::string &port,
+				 const std::string &directory)
 {
     pid_t pid;
 
@@ -138,63 +200,10 @@ void startServer(std::string_view host,
 			}
 			else
 			{
-				static char buffer[2048];
-				int res = recv(evlist[i].data.fd, buffer, 2048, MSG_NOSIGNAL);
-				if(res == 0 && errno != EAGAIN)
-				{
-					shutdown(evlist[i].data.fd, SHUT_RDWR);
-					close(evlist[i].data.fd);
-				}
-				else if(res > 0)
-				{
-					std::string req(buffer);
-					auto methodIt = req.find_first_of(' ');
-
-					if(std::string method(req.substr(0, methodIt)); method.compare("GET"))
-					{
-						sendNotFound(evlist[i].data.fd);
-					}
-					else
-					{
-						req.erase(0, methodIt + 1);
-						auto fileEndIndex = req.find_first_of(' ');
-
-						std::string file(req.substr(1, fileEndIndex - 1));
-
-						std::cout << file << file.size() << std::endl;
-
-						std::ifstream is (file);
-  						if (is) {
-    						is.seekg (0, is.end);
-    						int length = is.tellg();
-    						is.seekg (0, is.beg);
-
-    						char *buffer = new char [length];
-
-    						is.read (buffer,length);
-
-    						is.close();
-
-							std::stringstream stream;
-							stream << "HTTP/1.0 200 OK\r\n";
-							stream << "Content-length: "<< length << "\r\n";
-							stream << "Connection: close\r\n";
-							stream << "Content-Type: text/html\r\n";
-							stream << "\r\n";
-							stream << buffer;
-
-							auto resp = stream.str();
-
-							send(evlist[i].data.fd, resp.c_str(), resp.size(), MSG_NOSIGNAL);
-
-    						delete[] buffer;
-						}
-						else 
-						{
-							sendNotFound(evlist[i].data.fd);
-						}
-					}
-				}
+				int fd = evlist[i].data.fd;
+				std::thread thread(sendResp, fd);
+				thread.detach();
+				epoll_ctl(epfd, EPOLL_CTL_DEL, evlist[i].data.fd, &event);
 			}
 		}
 	}
