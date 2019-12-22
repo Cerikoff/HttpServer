@@ -61,7 +61,7 @@ void sendResp(const int fd)
 		else
 		{
 			req.erase(0, methodIt + 1);
-			auto fileEndIndex = req.find_first_of(' ');
+			auto fileEndIndex = req.find_first_of("? ");
 
 			std::string file(req.substr(1, fileEndIndex - 1));
 
