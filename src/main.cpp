@@ -37,7 +37,6 @@ void sendNotFound(const int fd)
 	static const char notFound[] = 
 		"HTTP/1.0 404 NOT FOUND\r\nContent-length: 0\r\nConnection: close\r\nContent-Type: text/html\r\n\r\n";
 	send(fd, notFound, sizeof notFound, MSG_NOSIGNAL);
-	close(fd);
 }
 
 void sendResp(const int fd)
@@ -47,7 +46,6 @@ void sendResp(const int fd)
 	if(res == 0 && errno != EAGAIN)
 	{
 		shutdown(fd, SHUT_RDWR);
-		close(fd);
 	}
 	else if(res > 0)
 	{
@@ -92,8 +90,7 @@ void sendResp(const int fd)
 				auto resp = stream.str();
 
 				send(fd, resp.c_str(), resp.size(), MSG_NOSIGNAL);
-				close(fd);
-
+				
     			delete[] buffer;
 			}
 			else 
@@ -102,6 +99,8 @@ void sendResp(const int fd)
 			}
 		}
 	}
+
+	close(fd);
 }
 
 void startServer(const std::string &host,
