@@ -53,7 +53,9 @@ void sendResp(const int fd)
 		std::string req(buffer);
 		auto methodIt = req.find_first_of(' ');
 
-		if(std::string method(req.substr(0, methodIt)); method.compare("GET"))
+		std::string method(req.substr(0, methodIt));
+
+		if(method.compare("GET"))
 		{
 			sendNotFound(fd);
 		}
